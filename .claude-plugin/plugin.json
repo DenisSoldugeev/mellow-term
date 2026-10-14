@@ -1,6 +1,6 @@
 {
   "name": "mellow",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A lofi room in your terminal: live lofi streams, Spotify playlists and animated pixel scenes in a side pane.",
   "author": {
     "name": "Denis Soldugeev"

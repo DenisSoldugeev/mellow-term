@@ -23,7 +23,7 @@ type Settings = { stationId?: string; volume?: number; scene?: string; custom?: 
 /** Everything that acts, built in `session.start` as closures over that hook's `$`. */
 type Controller = {
   stations: () => Promise<MellowStation[]>
-  tune: (station: MellowStation) => Promise<void>
+  tune: (station: MellowStation) => Promise<string>
   togglePlay: () => Promise<string>
   step: (delta: 1 | -1) => Promise<string>
   skip: (delta: 1 | -1) => Promise<boolean>
@@ -85,6 +85,7 @@ export const register: Register = (on) => {
       storeGet: (key) => $.store.get(key),
       storeSet: (key, value) => $.store.set(key, value),
       stat: (path) => $.fs.stat(path),
+      log: (text) => $.ui.log(`mellow: ${text}`, { to: 'debug' }),
     }
 
     const stations = async () => [...STATIONS, ...(await read($, customAtom))]
@@ -119,6 +120,12 @@ export const register: Register = (on) => {
       await update($, nowAtom, (n) => ({ ...n, stationId: station.id }))
       void persist()
       await player.play(station)
+      return outcome(station)
+    }
+
+    const outcome = async (st: MellowStation) => {
+      const now = await read($, nowAtom)
+      return now.status === 'error' ? `${st.name}: ${now.message ?? 'could not play.'}` : `Playing ${st.name}.`
     }
 
     let ticker: Timer | null = null
@@ -135,7 +142,7 @@ export const register: Register = (on) => {
         }
         if (player.station?.id === st.id && now.status === 'paused') await player.resume()
         else await tune(st)
-        return `Playing ${st.name}.`
+        return outcome(st)
       },
       async step(delta) {
         const all = await stations()
@@ -143,7 +150,7 @@ export const register: Register = (on) => {
         const i = all.findIndex((s) => s.id === stationId)
         const st = all[(i + delta + all.length) % all.length]!
         await tune(st)
-        return `Playing ${st.name}.`
+        return outcome(st)
       },
       skip: (delta) => player.skip(delta),
       stop: () => player.stop(),
@@ -266,8 +273,7 @@ export const register: Register = (on) => {
         if (!arg) return { text: await c.togglePlay() }
         const st = find(arg)
         if (!st) return { text: `No station matches "${arg}". /mellow list shows them.` }
-        await c.tune(st)
-        return { text: `Playing ${st.name}.` }
+        return { text: await c.tune(st) }
       }
       case 'pause':
       case 'toggle':

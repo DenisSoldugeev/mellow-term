@@ -17,15 +17,19 @@ export type Host = {
   storeGet: (key: string) => Promise<unknown>
   storeSet: (key: string, value: unknown) => Promise<void>
   stat: (path: string) => Promise<unknown>
+  log: (text: string) => void
 }
 
 const TMP = '/tmp/mellow'
 const FFPLAY = ['ffplay', '/opt/homebrew/bin/ffplay', '/usr/local/bin/ffplay', '/usr/bin/ffplay']
+const YT_CLIENTS: (string | undefined)[] = [undefined, 'mweb', 'web_embedded']
 const YTDLP = ['yt-dlp', '/opt/homebrew/bin/yt-dlp', '/usr/local/bin/yt-dlp', '/usr/bin/yt-dlp']
 
 export class Player {
   private ffplay = 'ffplay'
   private ytdlp = 'yt-dlp'
+  /** The yt-dlp player client that last worked; undefined is yt-dlp's default. */
+  private client: string | undefined = undefined
   private child: HookStream<ProcessSpawnChunk, ProcessSpawnResult> | null = null
   /** Bumped on every start and stop, so a child that ends late cannot report over a newer one. */
   private generation = 0
@@ -47,10 +51,11 @@ export class Player {
 
   /** Finds the binaries; called once per session. */
   async probe(): Promise<MellowTools> {
-    const find = async (candidates: string[]) => {
+    // ffplay answers `-version` only; yt-dlp takes `--version`.
+    const find = async (candidates: string[], flag: string) => {
       for (const bin of candidates) {
         try {
-          const { exitCode } = await this.host.run([bin, '--version'], { timeoutMs: 8000 })
+          const { exitCode } = await this.host.run([bin, flag], { timeoutMs: 8000 })
           if (exitCode === 0) return bin
         } catch {
           /* not here */
@@ -58,7 +63,8 @@ export class Player {
       }
       return null
     }
-    const [ff, yt] = await Promise.all([find(FFPLAY), find(YTDLP)])
+    const [ff, yt] = await Promise.all([find(FFPLAY, '-version'), find(YTDLP, '--version')])
+    this.host.log(`probe: ffplay=${ff ?? 'missing'} yt-dlp=${yt ?? 'missing'}`)
     if (ff) this.ffplay = ff
     if (yt) this.ytdlp = yt
     let spotify = false
@@ -164,6 +170,7 @@ export class Player {
     if (!url) {
       url = station.source.kind === 'stream' ? station.source.url : await this.resolveYouTube(station)
       if (my !== this.generation) return
+      this.host.log(`resolved ${station.id}: ${url ? 'ok' : 'nothing'}`)
       if (!url) return this.report({ status: 'error', message: 'Could not find this live stream. Try another station.' })
       this.url = { stationId: station.id, url }
     }
@@ -183,6 +190,7 @@ export class Player {
       } catch (err) {
         lastError = err instanceof Error ? err.message : String(err)
       }
+      this.host.log(`ffplay ended for ${station.id}: ${lastError || 'no error output'}`)
       if (this.child === child) this.child = null
       if (my !== this.generation) return
       // A live manifest expires after some hours and a network blip ends ffplay:
@@ -208,17 +216,28 @@ export class Player {
     if (station.source.kind !== 'youtube') return null
     const src = station.source
     const override = (await this.host.storeGet(`yt:${station.id}`)) as string | undefined
+    // YouTube sometimes answers the default client with a "confirm you're not a
+    // bot" page; the mobile-web and embedded clients usually still get through.
     const tryId = async (id: string) => {
-      try {
-        const { exitCode, stdout } = await this.host.run(
-          [this.ytdlp, '--no-warnings', '-f', '91/92/93/94/bestaudio/best', '-g', `https://www.youtube.com/watch?v=${id}`],
-          { timeoutMs: 45_000 },
-        )
-        const line = stdout.split('\n').find((l) => l.startsWith('http'))
-        return exitCode === 0 && line ? line.trim() : null
-      } catch {
-        return null
+      const clients = [this.client, ...YT_CLIENTS.filter((c) => c !== this.client)]
+      for (const client of clients) {
+        const extra = client ? ['--extractor-args', `youtube:player_client=${client}`] : []
+        try {
+          const { exitCode, stdout, stderr } = await this.host.run(
+            [this.ytdlp, '--no-warnings', ...extra, '-f', '91/92/93/94/bestaudio/best', '-g', `https://www.youtube.com/watch?v=${id}`],
+            { timeoutMs: 45_000 },
+          )
+          const line = stdout.split('\n').find((l) => l.startsWith('http'))
+          if (exitCode === 0 && line) {
+            this.client = client
+            return line.trim()
+          }
+          this.host.log(`yt-dlp ${id} (${client ?? 'default'}): exit ${exitCode}: ${stderr.trim().split('\n').pop() ?? ''}`)
+        } catch (err) {
+          this.host.log(`yt-dlp ${id} (${client ?? 'default'}): ${err instanceof Error ? err.message : String(err)}`)
+        }
       }
+      return null
     }
     const first = await tryId(override ?? src.id)
     if (first || !src.channel || !src.match) return first

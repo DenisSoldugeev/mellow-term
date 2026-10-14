@@ -66,7 +66,8 @@ WezTerm); elsewhere their name shows instead.
 ## How it works
 
 - YouTube live streams are resolved with `yt-dlp` and played by `ffplay` without
-  video. When a channel restarts a stream under a new ID, mellow finds the new one
+  video. When YouTube answers with a "confirm you're not a bot" page, mellow
+  retries with yt-dlp's mobile-web and embedded clients. When a channel restarts a stream under a new ID, mellow finds the new one
   on the channel's streams tab and remembers it.
 - Spotify playback, volume and skips go to the desktop app; its now-playing info
   is polled every few seconds.

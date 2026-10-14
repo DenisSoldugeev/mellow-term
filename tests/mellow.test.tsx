@@ -9,9 +9,13 @@ const PANE_PROPS = {
   isFocused: false,
   bodyColumns: 60,
   placement: 'dock' as const,
-  scroll: { top: 0, bodyRows: 30 },
+  scroll: { top: 0, offset: 0, bodyRows: 30 },
   view: {},
 }
+
+/** Runs `/mellow <args>` as the person would; origin and presentation are the engine's to stamp. */
+const run = ($: { command: { run: (input: never) => Promise<{ text?: string }> } }, args: string) =>
+  $.command.run({ command: 'mellow', args } as never)
 
 /** The host beneath the plugin: no binaries, osascript answers, the rest in memory. */
 function world(on: On, scripts: string[]) {
@@ -58,11 +62,11 @@ test('a Spotify link plays through the app and shows in the pane', async ($, on)
   world(on, scripts)
   await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
 
-  const added = await $.command.run({ command: 'mellow', args: 'add https://open.spotify.com/playlist/37i9dQZF1DWWQRwui0ExPn my mix' })
+  const added = await run($, 'add https://open.spotify.com/playlist/37i9dQZF1DWWQRwui0ExPn my mix')
   expect(added.text).toBe('Added and playing my mix.')
   expect(scripts.some((s) => s.includes('play track "spotify:playlist:37i9dQZF1DWWQRwui0ExPn"'))).toBe(true)
 
-  const list = await $.command.run({ command: 'mellow', args: 'list' })
+  const list = await run($, 'list')
   expect(list.text).toContain('▶ 17. my mix')
 
   for (const surface of ['terminal', 'desktop'] as const) {
@@ -76,6 +80,6 @@ test('a Spotify link plays through the app and shows in the pane', async ($, on)
 test('volume is clamped and persisted', async ($, on) => {
   world(on, [])
   await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
-  expect((await $.command.run({ command: 'mellow', args: 'vol 140' })).text).toBe('Volume 100%.')
-  expect((await $.command.run({ command: 'mellow', args: 'vol' })).text).toBe('Volume is 100%.')
+  expect((await run($, 'vol 140')).text).toBe('Volume 100%.')
+  expect((await run($, 'vol')).text).toBe('Volume is 100%.')
 })
