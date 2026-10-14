@@ -1,0 +1,6 @@
+{
+  "name": "mellow",
+  "description": "A lofi room for your terminal: live streams, Spotify and animated pixel scenes.",
+  "owner": { "name": "Denis Soldugeev" },
+  "plugins": [{ "name": "mellow", "source": "./" }]
+}

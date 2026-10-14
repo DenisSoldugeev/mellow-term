@@ -1,0 +1,19 @@
+{
+  "name": "mellow",
+  "version": "0.1.0",
+  "description": "A lofi room in your terminal: live lofi streams, Spotify playlists and animated pixel scenes in a side pane.",
+  "author": {
+    "name": "Denis Soldugeev"
+  },
+  "homepage": "https://github.com/DenisSoldugeev/mellow-term",
+  "repository": "https://github.com/DenisSoldugeev/mellow-term",
+  "license": "MIT",
+  "keywords": [
+    "lofi",
+    "music",
+    "radio",
+    "spotify",
+    "ambient"
+  ],
+  "types": "./types/index.d.ts"
+}
